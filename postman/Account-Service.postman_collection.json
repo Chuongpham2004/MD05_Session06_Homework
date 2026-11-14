@@ -1,0 +1,127 @@
+{
+  "info": {
+    "name": "Account Service - Bai 2",
+    "description": "API quản lý tài khoản ngân hàng (account-service). Chạy hệ thống: docker compose --env-file .env.bai1 -f docker-compose-bai2.yml up -d --build",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "accountId", "value": "" },
+    { "key": "accountNumber", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Tạo tài khoản mới",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test('Có id và số tài khoản 12 chữ số', () => {",
+              "  pm.expect(body.id).to.be.a('number');",
+              "  pm.expect(body.accountNumber).to.match(/^\\d{12}$/);",
+              "  pm.expect(body.status).to.eql('ACTIVE');",
+              "});",
+              "pm.collectionVariables.set('accountId', body.id);",
+              "pm.collectionVariables.set('accountNumber', body.accountNumber);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ownerName\": \"Tran Thi B\",\n  \"email\": \"tranthib{{$timestamp}}@example.com\",\n  \"initialBalance\": 5000000\n}"
+        },
+        "url": "{{baseUrl}}/api/accounts"
+      }
+    },
+    {
+      "name": "2. Lấy tài khoản theo id",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Đúng tài khoản vừa tạo', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('accountId'))));"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/accounts/{{accountId}}" }
+    },
+    {
+      "name": "3. Lấy tài khoản theo số tài khoản",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Đúng số tài khoản', () => pm.expect(pm.response.json().accountNumber).to.eql(pm.collectionVariables.get('accountNumber')));"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/accounts/number/{{accountNumber}}" }
+    },
+    {
+      "name": "4. Lấy danh sách tài khoản",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Trả về mảng không rỗng', () => pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty);"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/accounts" }
+    },
+    {
+      "name": "5. Lỗi - dữ liệu không hợp lệ (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 400', () => pm.response.to.have.status(400));",
+              "pm.test('Có lỗi từng trường', () => pm.expect(pm.response.json().errors).to.have.all.keys('ownerName', 'email', 'initialBalance'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"ownerName\": \"\",\n  \"email\": \"khong-phai-email\",\n  \"initialBalance\": -100\n}" },
+        "url": "{{baseUrl}}/api/accounts"
+      }
+    },
+    {
+      "name": "6. Lỗi - không tìm thấy (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"]
+          }
+        }
+      ],
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/accounts/999999" }
+    }
+  ]
+}
