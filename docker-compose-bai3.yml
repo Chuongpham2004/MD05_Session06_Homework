@@ -1,0 +1,45 @@
+services:
+  core-db:
+    image: postgres:15-alpine
+    container_name: core-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    # Không map port ra host: core-db chỉ truy cập được từ bên trong banking-network
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  account-service:
+    build: .
+    container_name: account-service
+    ports:
+      - "${APP_PORT}:8080"
+    environment:
+      DB_HOST: core-db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    networks:
+      - banking-network
+    depends_on:
+      core-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  banking-network:
+    name: banking-network
+    driver: bridge
+
+volumes:
+  pg-data:
+    name: pg-data
