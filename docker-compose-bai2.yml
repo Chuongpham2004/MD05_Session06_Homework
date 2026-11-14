@@ -1,0 +1,23 @@
+services:
+  core-db:
+    image: postgres:15-alpine
+    container_name: core-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+
+  account-service:
+    build: .
+    container_name: account-service
+    ports:
+      - "${APP_PORT}:8080"
+    environment:
+      DB_HOST: core-db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    depends_on:
+      - core-db
