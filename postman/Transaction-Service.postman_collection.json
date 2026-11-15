@@ -1,0 +1,98 @@
+{
+  "info": {
+    "name": "Transaction Service - Bai 4",
+    "description": "API chuyển tiền (transaction-service, cổng 8081). transaction-service gọi account-service qua OpenFeign tại http://account-service:8080. Chạy hệ thống: docker compose --env-file .env.bai1 -f docker-compose-bai4.yml up -d --build",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "txUrl", "value": "http://localhost:8081" },
+    { "key": "accountUrl", "value": "http://localhost:8080" },
+    { "key": "sourceAccount", "value": "" },
+    { "key": "destinationAccount", "value": "" },
+    { "key": "transactionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Chuẩn bị - tạo tài khoản nguồn",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Status 201', () => pm.response.to.have.status(201));",
+        "pm.collectionVariables.set('sourceAccount', pm.response.json().accountNumber);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"ownerName\": \"Nguoi Gui\",\n  \"email\": \"sender{{$timestamp}}@example.com\",\n  \"initialBalance\": 2000000\n}" },
+        "url": "{{accountUrl}}/api/accounts"
+      }
+    },
+    {
+      "name": "0. Chuẩn bị - tạo tài khoản đích",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Status 201', () => pm.response.to.have.status(201));",
+        "pm.collectionVariables.set('destinationAccount', pm.response.json().accountNumber);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"ownerName\": \"Nguoi Nhan\",\n  \"email\": \"receiver{{$timestamp}}@example.com\",\n  \"initialBalance\": 0\n}" },
+        "url": "{{accountUrl}}/api/accounts"
+      }
+    },
+    {
+      "name": "1. Chuyển tiền thành công",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+        "const body = pm.response.json();",
+        "pm.test('Giao dịch SUCCESS', () => pm.expect(body.status).to.eql('SUCCESS'));",
+        "pm.test('Có X-Request-Id để tra log', () => pm.expect(pm.response.headers.get('X-Request-Id')).to.be.a('string'));",
+        "pm.collectionVariables.set('transactionId', body.id);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"sourceAccountNumber\": \"{{sourceAccount}}\",\n  \"destinationAccountNumber\": \"{{destinationAccount}}\",\n  \"amount\": 500000,\n  \"description\": \"Chuyen tien qua transaction-service\"\n}" },
+        "url": "{{txUrl}}/api/transactions/transfer"
+      }
+    },
+    {
+      "name": "2. Kiểm tra số dư tài khoản nguồn đã bị trừ",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Số dư còn 1.500.000', () => pm.expect(Number(pm.response.json().balance)).to.eql(1500000));"
+      ] } }],
+      "request": { "method": "GET", "url": "{{accountUrl}}/api/accounts/number/{{sourceAccount}}" }
+    },
+    {
+      "name": "3. Lỗi - tài khoản nguồn không tồn tại (404)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Status 404', () => pm.response.to.have.status(404));",
+        "pm.test('Báo tài khoản nguồn không tồn tại', () => pm.expect(pm.response.json().message).to.include('không tồn tại'));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"sourceAccountNumber\": \"999999999999\",\n  \"destinationAccountNumber\": \"{{destinationAccount}}\",\n  \"amount\": 1000\n}" },
+        "url": "{{txUrl}}/api/transactions/transfer"
+      }
+    },
+    {
+      "name": "4. Lỗi - không đủ số dư (422)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Status 422', () => pm.response.to.have.status(422));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"sourceAccountNumber\": \"{{sourceAccount}}\",\n  \"destinationAccountNumber\": \"{{destinationAccount}}\",\n  \"amount\": 999999999\n}" },
+        "url": "{{txUrl}}/api/transactions/transfer"
+      }
+    },
+    {
+      "name": "5. Xem lịch sử giao dịch",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Status 200', () => pm.response.to.have.status(200));",
+        "pm.test('Có giao dịch vừa tạo', () => pm.expect(pm.response.json().map(t => t.id)).to.include(Number(pm.collectionVariables.get('transactionId'))));"
+      ] } }],
+      "request": { "method": "GET", "url": "{{txUrl}}/api/transactions" }
+    }
+  ]
+}

@@ -10,3 +10,8 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+logging:
+  pattern:
+    # In mã X-Request-Id trên mỗi dòng log để truy vết request xuyên service
+    level: "%5p [rid=%X{requestId:-}]"

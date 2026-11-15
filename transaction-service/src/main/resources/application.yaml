@@ -1,0 +1,35 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: transaction-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/${DB_NAME:banking_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  cloud:
+    openfeign:
+      client:
+        config:
+          account-service:
+            connect-timeout: 3000
+            read-timeout: 5000
+            # BASIC: log method, URL, status code và thời gian của mỗi request Feign
+            logger-level: basic
+
+# Địa chỉ account-service: trong Docker dùng tên container (DNS nội bộ), KHÔNG dùng localhost/IP
+account-service:
+  url: ${ACCOUNT_SERVICE_URL:http://account-service:8080}
+
+logging:
+  pattern:
+    # In mã X-Request-Id trên mỗi dòng log để truy vết request xuyên service
+    level: "%5p [rid=%X{requestId:-}]"
+  level:
+    # Feign chỉ in log khi logger của client ở mức DEBUG
+    org.example.transactionservice.client.AccountClient: DEBUG
