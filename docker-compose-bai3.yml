@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   account-service:
-    build: .
+    build: ./account-service
     container_name: account-service
     ports:
       - "${APP_PORT}:8080"

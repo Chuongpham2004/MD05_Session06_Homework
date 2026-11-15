@@ -1,5 +1,6 @@
 server:
-  port: 8081
+  # 8080 trong container; chạy local cạnh account-service thì đặt SERVER_PORT=8081
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:

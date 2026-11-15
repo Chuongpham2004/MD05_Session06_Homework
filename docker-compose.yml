@@ -1,0 +1,114 @@
+# =====================================================================
+#  Hệ thống Ngân hàng - file compose tổng (Bài 6)
+#  Khởi chạy: ./run.sh   (hoặc: docker compose up -d --build)
+#
+#  Bảo mật port: CHỈ api-gateway mở cổng 80 ra ngoài.
+#  core-db, account-service, transaction-service không có "ports",
+#  chỉ liên lạc được với nhau bên trong banking-network.
+#
+#  Thứ tự khởi động (depends_on + service_healthy):
+#    core-db (healthy)
+#      -> account-service + transaction-service (healthy)
+#        -> api-gateway
+# =====================================================================
+
+services:
+  core-db:
+    image: postgres:15-alpine
+    container_name: core-db
+    environment:
+      POSTGRES_USER: ${DB_USER:?Thiếu DB_USER trong file .env}
+      POSTGRES_PASSWORD: ${DB_PASS:?Thiếu DB_PASS trong file .env}
+      POSTGRES_DB: ${DB_NAME:?Thiếu DB_NAME trong file .env}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  account-service:
+    build: ./account-service
+    image: banking/account-service:latest
+    container_name: account-service
+    environment:
+      DB_HOST: core-db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    networks:
+      - banking-network
+    depends_on:
+      core-db:
+        condition: service_healthy
+    healthcheck:
+      # /actuator/health chỉ UP khi app đã chạy VÀ kết nối được core-db
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  transaction-service:
+    build: ./transaction-service
+    image: banking/transaction-service:latest
+    container_name: transaction-service
+    environment:
+      DB_HOST: core-db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      # Gọi account-service qua DNS nội bộ của Docker, không dùng localhost/IP
+      ACCOUNT_SERVICE_URL: http://account-service:8080
+    networks:
+      - banking-network
+    depends_on:
+      core-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  api-gateway:
+    build: ./api-gateway
+    image: banking/api-gateway:latest
+    container_name: api-gateway
+    # Single Point of Entry: cổng DUY NHẤT mở ra bên ngoài
+    ports:
+      - "80:8080"
+    environment:
+      ACCOUNT_SERVICE_URI: http://account-service:8080
+      TRANSACTION_SERVICE_URI: http://transaction-service:8080
+    networks:
+      - banking-network
+    depends_on:
+      account-service:
+        condition: service_healthy
+      transaction-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+networks:
+  banking-network:
+    name: banking-network
+    driver: bridge
+
+volumes:
+  pg-data:
+    name: pg-data

@@ -10,7 +10,7 @@ services:
       - "${DB_PORT}:5432"
 
   banking-app:
-    build: .
+    build: ./account-service
     container_name: banking-app
     ports:
       - "${APP_PORT}:8080"
