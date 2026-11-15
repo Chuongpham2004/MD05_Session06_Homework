@@ -1,0 +1,155 @@
+{
+  "info": {
+    "name": "Banking API Gateway - Bai 5",
+    "description": "Toàn bộ API của hệ thống ngân hàng gọi qua API Gateway (Single Point of Entry) tại http://localhost (port 80).\n\n- /api/v1/accounts/**     -> account-service:8080\n- /api/v1/transactions/** -> transaction-service:8080\n\nChạy hệ thống: docker compose --env-file .env.bai1 -f docker-compose-bai5.yml up -d --build",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gatewayUrl", "value": "http://localhost" },
+    { "key": "sourceAccount", "value": "" },
+    { "key": "destinationAccount", "value": "" },
+    { "key": "accountId", "value": "" },
+    { "key": "transactionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Accounts (-> account-service)",
+      "item": [
+        {
+          "name": "Tạo tài khoản nguồn",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+            "const body = pm.response.json();",
+            "pm.test('Location trỏ về đường dẫn qua gateway', () => pm.expect(pm.response.headers.get('Location')).to.eql('/api/v1/accounts/' + body.id));",
+            "pm.collectionVariables.set('sourceAccount', body.accountNumber);",
+            "pm.collectionVariables.set('accountId', body.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"ownerName\": \"Nguoi Gui Gateway\",\n  \"email\": \"gw-sender{{$timestamp}}@example.com\",\n  \"initialBalance\": 3000000\n}" },
+            "url": "{{gatewayUrl}}/api/v1/accounts"
+          }
+        },
+        {
+          "name": "Tạo tài khoản đích",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('destinationAccount', pm.response.json().accountNumber);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"ownerName\": \"Nguoi Nhan Gateway\",\n  \"email\": \"gw-receiver{{$timestamp}}@example.com\",\n  \"initialBalance\": 0\n}" },
+            "url": "{{gatewayUrl}}/api/v1/accounts"
+          }
+        },
+        {
+          "name": "Lấy danh sách tài khoản",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Trả về mảng tài khoản', () => pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty);"
+          ] } }],
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/v1/accounts" }
+        },
+        {
+          "name": "Lấy tài khoản theo id",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Đúng tài khoản', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('accountId'))));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/v1/accounts/{{accountId}}" }
+        },
+        {
+          "name": "Lấy tài khoản theo số tài khoản",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Đúng số tài khoản', () => pm.expect(pm.response.json().accountNumber).to.eql(pm.collectionVariables.get('sourceAccount')));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/v1/accounts/number/{{sourceAccount}}" }
+        },
+        {
+          "name": "Lỗi - dữ liệu không hợp lệ (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"ownerName\": \"\",\n  \"email\": \"khong-phai-email\",\n  \"initialBalance\": -100\n}" },
+            "url": "{{gatewayUrl}}/api/v1/accounts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions (-> transaction-service)",
+      "item": [
+        {
+          "name": "Chuyển tiền thành công",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+            "const body = pm.response.json();",
+            "pm.test('Giao dịch SUCCESS', () => pm.expect(body.status).to.eql('SUCCESS'));",
+            "pm.test('Gateway gắn X-Request-Id', () => pm.expect(pm.response.headers.get('X-Request-Id')).to.eql(body.requestId));",
+            "pm.collectionVariables.set('transactionId', body.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sourceAccountNumber\": \"{{sourceAccount}}\",\n  \"destinationAccountNumber\": \"{{destinationAccount}}\",\n  \"amount\": 1000000,\n  \"description\": \"Chuyen tien qua API Gateway\"\n}" },
+            "url": "{{gatewayUrl}}/api/v1/transactions/transfer"
+          }
+        },
+        {
+          "name": "Kiểm tra số dư sau khi chuyển",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Số dư tài khoản nguồn còn 2.000.000', () => pm.expect(Number(pm.response.json().balance)).to.eql(2000000));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/v1/accounts/number/{{sourceAccount}}" }
+        },
+        {
+          "name": "Lấy danh sách giao dịch",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Có giao dịch vừa tạo', () => pm.expect(pm.response.json().map(t => t.id)).to.include(Number(pm.collectionVariables.get('transactionId'))));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/v1/transactions" }
+        },
+        {
+          "name": "Lấy giao dịch theo id",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Đúng giao dịch', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('transactionId'))));"
+          ] } }],
+          "request": { "method": "GET", "url": "{{gatewayUrl}}/api/v1/transactions/{{transactionId}}" }
+        },
+        {
+          "name": "Lỗi - tài khoản nguồn không tồn tại (404)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));",
+            "pm.test('Báo tài khoản nguồn không tồn tại', () => pm.expect(pm.response.json().message).to.include('không tồn tại'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sourceAccountNumber\": \"999999999999\",\n  \"destinationAccountNumber\": \"{{destinationAccount}}\",\n  \"amount\": 1000\n}" },
+            "url": "{{gatewayUrl}}/api/v1/transactions/transfer"
+          }
+        },
+        {
+          "name": "Lỗi - không đủ số dư (422)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status 422', () => pm.response.to.have.status(422));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sourceAccountNumber\": \"{{sourceAccount}}\",\n  \"destinationAccountNumber\": \"{{destinationAccount}}\",\n  \"amount\": 999999999\n}" },
+            "url": "{{gatewayUrl}}/api/v1/transactions/transfer"
+          }
+        }
+      ]
+    }
+  ]
+}

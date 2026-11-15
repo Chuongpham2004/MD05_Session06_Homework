@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            # /api/v1/accounts/**  ->  http://account-service:8080/api/accounts/**
+            - id: account-service
+              uri: ${ACCOUNT_SERVICE_URI:http://account-service:8080}
+              predicates:
+                - Path=/api/v1/accounts,/api/v1/accounts/**
+              filters:
+                - RewritePath=/api/v1/(?<segment>.*), /api/$\{segment}
+                # Location trả về từ service nội bộ (http://account-service:8080/api/accounts/4)
+                # được đổi thành đường dẫn public qua gateway (/api/v1/accounts/4)
+                - RewriteResponseHeader=Location, ^https?://[^/]+/api/, /api/v1/
+
+            # /api/v1/transactions/**  ->  http://transaction-service:8080/api/transactions/**
+            - id: transaction-service
+              uri: ${TRANSACTION_SERVICE_URI:http://transaction-service:8080}
+              predicates:
+                - Path=/api/v1/transactions,/api/v1/transactions/**
+              filters:
+                - RewritePath=/api/v1/(?<segment>.*), /api/$\{segment}
+
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 10s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

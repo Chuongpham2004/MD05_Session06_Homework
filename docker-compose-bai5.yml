@@ -1,0 +1,91 @@
+services:
+  core-db:
+    image: postgres:15-alpine
+    container_name: core-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    # Không map port ra host: core-db chỉ truy cập được từ bên trong banking-network
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  account-service:
+    build: .
+    container_name: account-service
+    # Không map port ra host: client chỉ được đi qua api-gateway
+    expose:
+      - "8080"
+    environment:
+      DB_HOST: core-db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    networks:
+      - banking-network
+    depends_on:
+      core-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/api/accounts || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  transaction-service:
+    build: ./transaction-service
+    container_name: transaction-service
+    # Không map port ra host: client chỉ được đi qua api-gateway
+    expose:
+      - "8080"
+    environment:
+      # Lắng nghe 8080 trong container để gateway forward về transaction-service:8080
+      SERVER_PORT: 8080
+      DB_HOST: core-db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      ACCOUNT_SERVICE_URL: http://account-service:8080
+    networks:
+      - banking-network
+    depends_on:
+      core-db:
+        condition: service_healthy
+      account-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    # Single Point of Entry: cổng duy nhất mở ra host, chuẩn HTTP 80
+    ports:
+      - "80:8080"
+    environment:
+      ACCOUNT_SERVICE_URI: http://account-service:8080
+      TRANSACTION_SERVICE_URI: http://transaction-service:8080
+    networks:
+      - banking-network
+    depends_on:
+      - account-service
+      - transaction-service
+    restart: unless-stopped
+
+networks:
+  banking-network:
+    name: banking-network
+    driver: bridge
+
+volumes:
+  pg-data:
+    name: pg-data
